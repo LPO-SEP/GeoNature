@@ -27,6 +27,7 @@ import {
   MatTooltipModule,
 } from '@angular/material';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 
 // Third party's modules
 import 'rxjs/Rx';
@@ -42,6 +43,7 @@ import { AreasIntersectedComponent } from './form/areas-intersected/areas-inters
 import { AutoCompleteComponent } from '@geonature_common/form/autocomplete/autocomplete.component';
 import { ConfirmationDialog } from '@geonature_common/others/modal-confirmation/confirmation.dialog';
 import { DatalistComponent } from '@geonature_common/form/datalist/datalist.component';
+import { BreadcrumbsComponent } from '@geonature_common/others/breadcrumbs/breadcrumbs.component'
 import { DatasetsComponent } from './form/datasets/datasets.component';
 import { DateComponent } from './form/date/date.component';
 import { DisplayMediasComponent } from '@geonature_common/form/media/display-medias.component';
@@ -132,12 +134,16 @@ import { SyntheseDataService } from '@geonature_common/form/synthese-form/synthe
     NgxDatatableModule,
     NgxMatSelectSearchModule,
     ReactiveFormsModule,
+    RouterModule,
     TranslateModule.forChild(),
     TreeModule,
   ],
   declarations: [
     AcquisitionFrameworksComponent,
     AreasComponent,
+    BreadcrumbsComponent,
+    DateComponent,
+    TaxonomyComponent,
     AreasIntersectedComponent,
     AutoCompleteComponent,
     ConfirmationDialog,
@@ -204,6 +210,7 @@ import { SyntheseDataService } from '@geonature_common/form/synthese-form/synthe
   exports: [
     AcquisitionFrameworksComponent,
     AreasComponent,
+    BreadcrumbsComponent,
     AreasIntersectedComponent,
     AutoCompleteComponent,
     ConfirmationDialog,

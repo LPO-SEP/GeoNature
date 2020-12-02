@@ -94,6 +94,8 @@ class MediasConfig(Schema):
 
 class MetadataConfig(Schema):
     NB_AF_DISPLAYED = fields.Integer(missing=50, validate=OneOf([10, 25, 50, 100]))
+    AF_PDF_TITLE = fields.String(missing="")
+    DS_PDF_TITLE = fields.String(missing="")
 
 
 # class a utiliser pour les paramètres que l'on ne veut pas passer au frontend
@@ -293,6 +295,7 @@ class GnGeneralSchemaConf(Schema):
     MEDIAS = fields.Nested(MediasConfig, missing={})
     UPLOAD_FOLDER = fields.String(missing="static/medias")
     METADATA = fields.Nested(MetadataConfig, missing={})
+    NB_MAX_DATA_SENSITIVITY_REPORT = fields.Integer(missing=1000000)
 
     @validates_schema
     def validate_enable_sign_up(self, data):

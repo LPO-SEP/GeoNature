@@ -144,8 +144,6 @@ import { SyntheseDataService } from '@geonature_common/form/synthese-form/synthe
     AcquisitionFrameworksComponent,
     AreasComponent,
     BreadcrumbsComponent,
-    DateComponent,
-    TaxonomyComponent,
     AreasIntersectedComponent,
     AutoCompleteComponent,
     ConfirmationDialog,

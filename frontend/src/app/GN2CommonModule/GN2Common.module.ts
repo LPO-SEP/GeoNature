@@ -90,6 +90,8 @@ import { DisplayMouseOverDirective } from './directive/display-mouse-over.direct
 // Pipes
 import { ReadablePropertiePipe } from './pipe/readable-propertie.pipe';
 import { SafeHtmlPipe } from './pipe/sanitizer.pipe';
+import { SafeStripHtmlPipe } from './pipe/strip-html.pipe';
+import { StripHtmlPipe } from './pipe/strip-html.pipe';
 
 // Services
 import { CommonService } from './service/common.service';
@@ -184,6 +186,8 @@ import { SyntheseDataService } from '@geonature_common/form/synthese-form/synthe
     ReadablePropertiePipe,
     SafeHtmlPipe,
     SyntheseSearchComponent,
+    SafeStripHtmlPipe,
+    StripHtmlPipe,
     TaxaComponent,
     TaxonAdvancedModalComponent,
     TaxonomyComponent,
@@ -275,6 +279,8 @@ import { SyntheseDataService } from '@geonature_common/form/synthese-form/synthe
     ReactiveFormsModule,
     ReadablePropertiePipe,
     SafeHtmlPipe,
+    SafeStripHtmlPipe,
+    StripHtmlPipe,
     SyntheseSearchComponent,
     TaxaComponent,
     TaxonAdvancedModalComponent,

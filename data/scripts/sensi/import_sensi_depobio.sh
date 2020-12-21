@@ -26,6 +26,7 @@ COPY gn_sensitivity.tmp_rules FROM '/tmp/sensibles_to_inpn_20201218.csv' DELIMIT
 "
 
 
+psql -h $db_host -U $user_pg -d $db_name -c "
 
 delete from gn_sensitivity.cor_sensitivity_area ;
 delete from gn_sensitivity.cor_sensitivity_criteria;
@@ -46,3 +47,4 @@ FROM gn_sensitivity.t_sensitivity_rules   s
 JOIN ref_geo.l_areas
 ON id_territory = area_code AND  id_type = (SELECT id_type FROM ref_geo.bib_areas_types  WHERE type_code ='DEP')
 ;
+"

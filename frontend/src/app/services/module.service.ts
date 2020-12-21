@@ -9,8 +9,6 @@ export class ModuleService {
   public displayedModules: Array<any>;
   private $module: BehaviorSubject<Array<any>> = new BehaviorSubject(null);
   constructor(private _api: DataFormService) {
-    console.log('init');
-    
     this.fetchModules();
   }
 
@@ -48,7 +46,7 @@ export class ModuleService {
   getModule(module_code: string) {
     const modules = localStorage.getItem('modules');
     let searchModule = null;
-    if (modules) {
+    if (modules && modules !== 'null') {
       JSON.parse(modules).forEach(mod => {
         if (mod.module_code.toLowerCase() === module_code.toLowerCase()) {
           searchModule = mod;

@@ -110,8 +110,8 @@ import { APP_CONFIG_TOKEN, AppConfig } from '@geonature_config/app.config';
     SideNavService,
     CruvedStoreService,
     UserDataService,
-    { provide: APP_CONFIG_TOKEN, useValue: AppConfig },
     { provide: HTTP_INTERCEPTORS, useClass: MyCustomInterceptor, multi: true },
+    { provide: APP_CONFIG_TOKEN, useValue: AppConfig },
   ],
   bootstrap: [AppComponent]
 })

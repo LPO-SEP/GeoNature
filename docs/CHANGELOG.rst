@@ -2,23 +2,69 @@
 CHANGELOG
 =========
 
-2.5.6 (unreleased)
-------------------
+2.6.0 - Saxifraga (unreleased)
+------------------------------
+
+Nécessite Debian 10, car cette nouvelle version nécessite PostgreSQL 10 minimum (qui n'est pas fourni par défaut avec Debian 9) pour les triggers déclenchés "on each statement", plus performants.
+
+**TODO**
+
+- Review and include some PR : https://github.com/PnX-SI/GeoNature/pulls
+- Bug des observateurs par défaut non chargé
+- Update SQL - J'ai fait un deuxième SQL à part dédié à cela - Calculer la sensibilité de toutes les données existantes dans la synthèse, mais ne pas écraser les niveaux de diffusion existants, supérieurs au niveau de diffusion calculé automatiquement. A relire, ajuster : data/migrations/2.5.5to2.6.0-update-sensitivity.sql
+- Finir le tableau des JDD (https://github.com/PnX-SI/GeoNature/issues/889#issuecomment-742655014), je n'ai pas vu passer les commits liés aux 2 derniers points cochés (Dépôt sur V du CRUVED et paramètre du bouton Import depuis JDD)
+- https://github.com/PnX-SI/GeoNature/issues/922#issuecomment-690033212 indique une vérification à faire ?
+- Merger la branche Sensibilité (https://github.com/PnX-SI/GeoNature/compare/develop...sensitivity) ?
+- Supprimer le fichier https://github.com/PnX-SI/GeoNature/blob/develop/data/scripts/sensi/sensibles_to_inpn_20201218.csv car c'est celui sur geonature.fr/data qui est utilisé ?
+- data/migrations/insert_reg.sh à déplacer dans data/scripts/ref_geo/ ?
+- Import initial depuis GINCO-DEPOBIO 1 : Mettre tous les JDD importés en inactif. Et les CA en fermés ?
 
 **🚀 Nouveautés**
 
+* Sensibilité : Ajout d'un trigger sur la synthèse déclenchant automatiquement le calcul de la sensibilité des observations et calculant ensuite leur niveau de diffusion (si celui-ci est NULL) en fonction de la sensibilité (#871)
 * Métadonnées : Refonte de la liste des CA et JDD avec l'ajout d'informations et d'actions, ainsi qu'une recherche avancée (#889)
 * Métadonnées : Révision des fiches info des CA et JDD avec l'ajout d'actions, du tableau des imports et du téléchargement des rapports d'UUID et de sensibilité (#889)
-* Métadonnées : Possibilité d'importer directement dans un JDD depuis le module Métadonnées (#889)
+* Métadonnées: Ajout de la fonctionnalité de fermeture (dépot) au niveau du CA (qui ferme tous les JDD du CA), seulement si le CA a au moins un JDD. Désactivée par défaut via le paramètre ``ENABLE_CLOSE_AF`` (#889 par @alainlaupinmnhn)
+* Métadonnées : Possibilité d'envoyer un email automatique au créateur et à l'utilisateur d'un CA quand celui-ci est fermé (#889)
+* Métadonnées : Possibilité d'ajouter un titre spécifique aux exports PDF des CA quand ceux-ci sont fermés, par exemple pour en faire un certificat (#889)
+* Métadonnées : Possibilité d'importer directement dans un JDD actif depuis le module Métadonnées, désactivé par défaut (#889)
+* Métadonnées : Amélioration des possibilités de customisation des PDF des fiches de métadonnées
+* Métadonnées : Amélioration des fiches détail des CA et JDD et ajout de la liste des imports dans les fiches des JDD (#889)
 * Synthèse : Possibilité d'ouvrir le module avec un JDD préselectionné (``<URL_GeoNature>/#/synthese?id_dataset=2``) et ajout d'un lien direct depuis le module Métadonnées (#889)
+* Exports au format SHP remplacés par défaut par le format GeoPackage (GPKG) plus simple, plus léger, plus performant et unique. Les exports SHP restent activables dans la configuration des modules (#898)
+* Validation : Préremplir l'email à l'observateur avec des informations paramétrables sur l'occurrence (date, nom du taxon, commune, médias) (#981)
+* Validation : Possibilité de paramètrer les colonnes affichées dans la liste des observations (#980)
 * Possibilité de customiser le logo principal (GeoNature par défaut) dans ``frontend/src/custom/images/``
+* Ajout d'un champs json ``additional_data`` dans la table ``l_areas`` (#1111)
+* Complément des scripts de migration des données depuis GINCO (``data/scripts/import_ginco/``)
+* Barre de navigation : Mention plus générique et générale des auteurs
+* Redirection vers le formulaire d'authentification si on tente d'accéder à une page directement sans être authentifié et sans passer par le frontend (#1193 par @bouttier)
+* Connexion à MTD : possibilité de filtrer les JDD par instance, avec le paramètre ``ID_INSTANCE_FILTER``, par exemple pour ne récupérer que les JDD de sa région (#1195)
+* Connexion à MTD : récupération du créateur et des acteurs (#922, #1008 et #1196)
+* Connexion à MTD : récupération du nouveau champs ``statutDonneesSource`` pour indiquer si le JDD est d'origine publique ou privée
+* Création d'une commande GeoNature permettant de récupérer les JDD, CA et acteurs depuis le webservice MTD de l'INPN, en refactorisant les outils existants d'import depuis ce webservice
+* Création d'un script pour DEPOBIO, permettant de remplacer les règles de sensibilité nationales et régionales, par les règles départementales (``data/scripts/sensi/import_sensi_depobio.sh``)
+* Création d'un script permettant d'importer les régions dans le référentiel géographique (``data/migrations/insert_reg.sh``)
 
 **🐛 Corrections**
 
-* Synthèse : fonction ``import_row_from_table``: test sur LOWER(tbl_name) 
+* Occhab : Export SIG (GPKG ou SHP) corrigé (#898)
+* Meilleur nettoyage des sessions enregistrées dans le navigateur (#1178)
+* Synthèse : Amélioration du trigger calculant les zonages d'une observation en ne faisant un ``ST_Touches()`` seulement si l'observation n'est pas un point et en le passant ``on each statement`` (#716)
+* Synthèse : Retour du bouton pour revenir à l'observation dans son module d'origine (Occtax par exemple) depuis la fiche info d'une observation (#1147)
+* Synthèse : Suppression du message "Aucun historique de validation" quand une observation n'a pas encore de validation (#1147)
+* Synthèse : Correction du CRUVED sur le R = 1 (ajout des JDD de l'utilisateur)
+* Occtax : Correction de l'erreur de chargement de l'observateur lors de la modification d'un relevé (#1177)
+* Occtax : Suppression de l'obligation de remplir les champs "Déterminateur" et "Méthode de détermination"
+* Métadonnées : Suppression du graphique de répartition des espèces dans les exports PDF car il était partiellement fonctionnel
+* Synthèse : fonction ``import_row_from_table`` : test sur ``LOWER(tbl_name)``
+* Redirection vers le formulaire d'authentification si l'on essaie d'accéder à une URL sans être authentifié et sans passer par le frontend (#1193)
+* Script d'installation globale : prise en compte du paramètre ``install_grid_layer`` permettant d'intégrer ou non les mailles dans le ``ref_geo`` lors de l'installation initiale (#1133)
 
 **⚠️ Notes de version**
 
+* https://github.com/PnX-SI/GeoNature/blob/develop/data/migrations/2.5.5to2.6.0.sql
+* Calcul de la sensibilité des données existantes dans la Synthèse (ainsi que de leur niveau de diffusion si celui-ci n'a pas été renseigné par ailleurs) : data/migrations/2.5.5to2.6.0-update-sensitivity.sql
 * Si vous aviez fait des customisations (logo, PDF export...) alors XXXXXX
 * Revoir http://docs.geonature.fr/admin-manual.html#integrer-son-logo ?
 
@@ -100,6 +146,7 @@ CHANGELOG
 * Suivez la procédure classique de mise à jour de GeoNature (http://docs.geonature.fr/installation-standalone.html#mise-a-jour-de-l-application).
 * Les noms de colonnes de l'export de la Synthèse ont été entièrement revus dans la vue fournie par défaut (``gn_synthese.v_synthese_for_export``). Si vous aviez surcouché le paramètre ``EXPORT_COLUMNS`` dans le fichier ``config/geonature_config.toml``, vérifiez les noms des colonnes.
 * Vérifiez que la valeur du paramètre ``taxref_version`` dans la table ``gn_commons.t_parameters`` correspond bien à votre version actuelle de Taxref (11.0 ou 13.0).
+
 
 2.5.2 (2020-10-13)
 ------------------

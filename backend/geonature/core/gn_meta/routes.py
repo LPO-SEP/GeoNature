@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 from binascii import a2b_base64
 
+from lxml import etree as ET
+
 from flask import (
     Blueprint,
     current_app,
@@ -17,7 +19,7 @@ from flask import (
     copy_current_request_context,
     Response,
 )
-from sqlalchemy.sql import text, exists, select
+from sqlalchemy.sql import text, exists, select, update
 from sqlalchemy.sql.functions import func
 
 
@@ -32,6 +34,7 @@ from geonature.core.ref_geo.models import LAreas
 
 from pypnnomenclature.models import TNomenclatures
 from pypnusershub.db.tools import InsufficientRightsError
+from pypnusershub.db.models import User
 
 from binascii import a2b_base64
 
@@ -60,8 +63,9 @@ from utils_flask_sqla.response import json_resp, to_csv_resp, generate_csv_conte
 from werkzeug.datastructures import Headers
 from geonature.core.gn_permissions import decorators as permissions
 from geonature.core.gn_permissions.tools import cruved_scope_for_user_in_module
-from geonature.core.gn_meta import mtd_utils
+from geonature.core.gn_meta.mtd import mtd_utils
 import geonature.utils.filemanager as fm
+import geonature.utils.utilsmails as mail
 
 
 import threading
@@ -444,13 +448,12 @@ def sensi_report(info_role):
                 "cd_sensi"
             ),
             func.ref_nomenclatures.get_nomenclature_label(
-                Synthese.id_nomenclature_sensitivity, "fr"
-            ).label("sensiNiveau"),
-            func.ref_nomenclatures.get_nomenclature_label(
                 Synthese.id_nomenclature_bio_status, "fr"
             ).label("occStatutBiologique"),
             func.min(CorSensitivitySynthese.meta_update_date).label("sensiDateAttribution"),
             func.min(CorSensitivitySynthese.sensitivity_comment).label("sensiAlerte"),
+            TNomenclatures.cd_nomenclature,
+            TNomenclatures.label_fr
         )
         .select_from(Synthese)
         .outerjoin(CorAreaSynthese, CorAreaSynthese.id_synthese == Synthese.id_synthese)
@@ -476,7 +479,7 @@ def sensi_report(info_role):
             TSources.name_source == "Import(id={})".format(id_import)
         )
 
-    data = query.group_by(Synthese.id_synthese).all()
+    data = query.group_by(Synthese.id_synthese, TNomenclatures.cd_nomenclature, TNomenclatures.label_fr).all()
 
     dataset = None
     str_productor = ""
@@ -508,11 +511,13 @@ def sensi_report(info_role):
             "sensiAlerte": row.sensiAlerte,
             "sensible": "Oui" if row.cd_sensi != "0" else "Non",
             "sensiDateAttribution": row.sensiDateAttribution,
-            "sensiNiveau": row.sensiNiveau,
+            "sensiNiveau": f"{row.cd_nomenclature} = {row.label_fr}" ,
         }
         for row in data
     ]
-
+    sensi_version = DB.session.query(func.gn_commons.get_default_parameter('ref_sensi_version')).one_or_none()
+    if sensi_version:
+        sensi_version = sensi_version[0]
     # set an header only if the rapport is on a dataset
     if ds_id:
         header = f""""Rapport de sensibilité"
@@ -520,11 +525,10 @@ def sensi_report(info_role):
             "Identifiant interne";"{dataset.id_dataset}"
             "Identifiant SINP";"{dataset.unique_dataset_id}"
             "Organisme/personne fournisseur";"{str_productor}"
-            "Identifiant de la soumission";"undefined"
             "Date de création du rapport";"{dt.datetime.now().strftime("%d/%m/%Y %Hh%M")}"
             "Nombre de données sensibles";"{len(list(filter(lambda row: row["sensible"] == "Oui", data)))}"
             "Nombre de données total dans le fichier";"{len(data)}"
-            "sensiVersionReferentiel";"undefined"
+            "sensiVersionReferentiel";"{sensi_version}"
             """
 
     return my_csv_resp(
@@ -681,16 +685,16 @@ def get_export_pdf_dataset(id_dataset, info_role):
 
     if info_role.value_filter != "3":
         try:
+            user_actor = [cor["id_role"] for cor in df["cor_dataset_actor"] if cor["id_role"]]
+            user_actor.append(df.get('id_digitizer'))
             if info_role.value_filter == "1":
-                actors = [cor["id_role"] for cor in df["cor_dataset_actor"]]
-                assert info_role.id_role in actors
+                assert info_role.id_role in user_actor
             elif info_role.value_filter == "2":
-                actors = [cor["id_role"] for cor in df["cor_dataset_actor"]]
-                organisms = [cor["id_organism"] for cor in df["cor_dataset_actor"]]
-                assert info_role.id_role in actors or info_role.id_organisme in organisms
+                organisms = [cor["id_organism"] for cor in df["cor_dataset_actor"] if cor["id_organism"]]
+                assert info_role.id_role in user_actor or info_role.id_organisme in organisms
         except AssertionError:
             raise InsufficientRightsError(
-                ('User "{}" cannot read this current dataset').format(info_role.id_role), 403,
+                ('User "{}" cannot export this current dataset').format(info_role.id_role), 403,
             )
 
     if not df:
@@ -762,12 +766,6 @@ def get_export_pdf_acquisition_frameworks(id_acquisition_framework, info_role):
     Get a PDF export of one acquisition
     """
 
-    # Verification des droits
-    if info_role.value_filter == "0":
-        raise InsufficientRightsError(
-            ('User "{}" cannot "{}" a dataset').format(info_role.id_role, "export"), 403,
-        )
-
     # Recuperation des données
     af = DB.session.query(TAcquisitionFrameworkDetails).get(id_acquisition_framework)
     acquisition_framework = af.as_dict(True)
@@ -837,7 +835,7 @@ def get_export_pdf_acquisition_frameworks(id_acquisition_framework, info_role):
             "bandeau": "Bandeau_pdf.png",
             "entite": "sinp",
         }
-        acquisition_framework["title"] = current_app.config["METADATA"]["AF_PDF_TITLE"]
+        acquisition_framework["pdf_title"] = current_app.config['METADATA']["AF_PDF_TITLE"]
         date = dt.datetime.now().strftime("%d/%m/%Y")
         acquisition_framework["footer"] = {
             "url": current_app.config["URL_APPLICATION"]
@@ -856,19 +854,29 @@ def get_export_pdf_acquisition_frameworks(id_acquisition_framework, info_role):
             ),
             404,
         )
+    if af.initial_closing_date:
+        acquisition_framework['initial_closing_date'] = af.initial_closing_date.strftime('%d-%m-%Y %H:%M')
+        filename = "{}_{}_{}.pdf".format(
+            id_acquisition_framework,
+            acquisition_framework["acquisition_framework_name"][0:31].replace(" ", "_"),
+            af.initial_closing_date.strftime("%d%m%Y_%H%M%S")
+        )
+        acquisition_framework["closed_title"] = current_app.config["METADATA"]["CLOSED_AF_TITLE"]
 
-    filename = "{}_{}_{}.pdf".format(
-        id_acquisition_framework,
-        acquisition_framework["acquisition_framework_name"][0:31].replace(" ", "_"),
-        dt.datetime.now().strftime("%d%m%Y_%H%M%S"),
-    )
+    else:
+        filename = "{}_{}_{}.pdf".format(
+            id_acquisition_framework,
+            acquisition_framework["acquisition_framework_name"][0:31].replace(" ", "_"),
+            dt.datetime.now().strftime("%d%m%Y_%H%M%S"),
+        )
 
-    try:
-        f = open(str(BACKEND_DIR) + "/static/images/taxa.png")
-        f.close()
-        acquisition_framework["chart"] = True
-    except IOError:
-        acquisition_framework["chart"] = False
+
+    # try:
+    #     f = open(str(BACKEND_DIR) + "/static/images/taxa.png")
+    #     f.close()
+    #     acquisition_framework["chart"] = True
+    # except IOError:
+    #     acquisition_framework["chart"] = False
 
     # Appel de la methode pour generer un pdf
     pdf_file = fm.generate_pdf(
@@ -1097,6 +1105,112 @@ def post_acquisition_framework(info_role):
         af.id_digitizer = info_role.id_role
         DB.session.add(af)
     DB.session.commit()
+    return af.as_dict()
+
+def publish_acquisition_framework_mail(af, info_role):
+    """
+    Method for sending a mail during the publication process
+    """
+
+    # Parsing the AF XML from MTD to get the idTPS parameter
+    af_xml = mtd_utils.get_acquisition_framework(str(af.unique_acquisition_framework_id).upper())
+    xml_parser = ET.XMLParser(ns_clean=True, recover=True, encoding="utf-8")
+    namespace = current_app.config["XML_NAMESPACE"]
+    root = ET.fromstring(af_xml, parser=xml_parser)
+    try:
+        ca = root.find(".//" + namespace + "CadreAcquisition")
+        ca_idtps = mtd_utils.get_tag_content(ca, "idTPS")
+    except AttributeError:
+        ca_idtps = ""
+
+    # Generate the links for the AF's deposite certificate and framework download
+    pdf_url = current_app.config["API_ENDPOINT"] + "/meta/acquisition_frameworks/export_pdf/" + str(af.id_acquisition_framework)
+
+    # Mail subject
+    mail_subject = "Dépôt du cadre d'acquisition " + str(af.unique_acquisition_framework_id).upper()
+    mail_subject_base = current_app.config["METADATA"]["MAIL_SUBJECT_AF_CLOSED_BASE"]
+    if mail_subject_base:
+        mail_subject = mail_subject_base + " " + mail_subject
+    if ca_idtps:
+        mail_subject = mail_subject + " pour le dossier {}".format(ca_idtps)
+
+    # Mail content
+    mail_content = f"""Bonjour,<br>
+    <br>
+    Le cadre d'acquisition <i> "{af.acquisition_framework_name}" </i> dont l’identifiant est
+    "{str(af.unique_acquisition_framework_id).upper()}" que vous nous avez transmis a été déposé"""
+    
+
+    mail_content_additions = current_app.config["METADATA"]["MAIL_CONTENT_AF_CLOSED_ADDITION"]
+    mail_content_pdf = current_app.config['METADATA']["MAIL_CONTENT_AF_CLOSED_PDF"]
+    mail_content_greetings = current_app.config['METADATA']["MAIL_CONTENT_AF_CLOSED_GREETINGS"]
+
+    if ca_idtps:
+        mail_content = mail_content + f"dans le cadre du dossier {ca_idtps}"
+
+    if mail_content_additions:
+        mail_content = mail_content + mail_content_additions
+    else:
+        mail_content = mail_content + ".<br>"
+
+    if mail_content_pdf:
+        mail_content = mail_content + mail_content_pdf.format(pdf_url) + pdf_url + "<br>"
+
+    if mail_content_greetings:
+        mail_content = mail_content + mail_content_greetings
+
+    # Mail recipients : if the publisher is the the AF digitizer, we send a mail to both of them
+    mail_recipients = set()
+    cur_user = DB.session.query(User).get(info_role.id_role)
+    if cur_user and cur_user.email:
+        mail_recipients.add(cur_user.email)
+
+    if af.id_digitizer:
+        digitizer = DB.session.query(User).get(af.id_digitizer)
+        if digitizer and digitizer.email:
+            mail_recipients.add(digitizer.email)
+
+    # Mail sent
+    if mail_subject and mail_content and len(mail_recipients) > 0:
+        mail.send_mail(list(mail_recipients), mail_subject, mail_content)
+
+
+@routes.route("/acquisition_framework/publish/<int:af_id>", methods=["GET"])
+@permissions.check_cruved_scope("E", True, module_code="METADATA")
+@json_resp
+def publish_acquisition_framework(info_role, af_id):
+    """
+    Publish an acquisition framework
+    .. :quickref: Metadata;
+    """
+
+    # The AF must contain DS to be published
+    datasets = TDatasets.query.filter_by(id_acquisition_framework=af_id).all()
+
+    if not datasets:
+        return (
+            render_template(
+                "error.html",
+                error="Le cadre doit contenir des jeux de données",
+                redirect=current_app.config["URL_APPLICATION"] + "/#/metadata",
+            ),
+            404,
+        )
+
+    # After publishing an AF, we set it as closed and all its DS as inactive
+    for dataset in datasets:
+        dataset.active=False
+
+    # If the AF if closed for the first time, we set it an initial_closing_date as the actual time
+    af = DB.session.query(TAcquisitionFramework).get(af_id)
+    af.opened=False
+    if (af.initial_closing_date is None):
+        af.initial_closing_date=dt.datetime.now()
+    # We send a mail to notify the AF publication
+    publish_acquisition_framework_mail(af, info_role)
+
+    DB.session.commit()
+
     return af.as_dict()
 
 
